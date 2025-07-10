@@ -4,7 +4,7 @@ import { useState, useEffect, createContext, useContext, useCallback, useRef } f
 import { useRouter, usePathname } from 'next/navigation';
 import { User } from '@/types/auth';
 
-export type AuthContextType = {
+export interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
@@ -12,7 +12,7 @@ export type AuthContextType = {
   isAuthenticated: () => boolean;
   isAdmin: () => boolean;
   refreshUser: () => Promise<void>;
-};
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
