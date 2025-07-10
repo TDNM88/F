@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getMongoDb } from './db';
 import { verify } from 'jsonwebtoken';
 import { User } from '@/types/auth';
+import { ObjectId } from 'mongodb';
 
 /**
  * Verifies the JWT token from the request cookies
@@ -26,7 +27,7 @@ export async function verifyToken(req: NextRequest): Promise<User | null> {
       throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
     
-    const user = await db.collection('users').findOne({ _id: decoded._id });
+    const user = await db.collection('users').findOne({ _id: new ObjectId(decoded._id) });
     
     if (!user) {
       return null;
