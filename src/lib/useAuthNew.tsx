@@ -24,13 +24,39 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-// Cache user data with a timestamp
-let cachedUser: { 
-  data: User | null; 
-  timestamp: number;
-} | null = null;
-
+// Cache user data with a timestamp in localStorage
+const AUTH_CACHE_KEY = 'auth_user_cache';
 const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days cache duration (matching cookie expiration)
+
+// Helper functions to get/set auth cache
+function getAuthCache(): { data: User | null; timestamp: number } | null {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const cached = localStorage.getItem(AUTH_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch (e) {
+    console.error('Failed to parse auth cache:', e);
+    return null;
+  }
+}
+
+function setAuthCache(userData: User | null): void {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    if (userData) {
+      localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+        data: userData,
+        timestamp: Date.now()
+      }));
+    } else {
+      localStorage.removeItem(AUTH_CACHE_KEY);
+    }
+  } catch (e) {
+    console.error('Failed to set auth cache:', e);
+  }
+}
 
 function useAuthStandalone(): AuthContextType {
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +69,7 @@ function useAuthStandalone(): AuthContextType {
       const now = Date.now();
       
       // Check cache first
+      const cachedUser = getAuthCache();
       if (cachedUser && (now - cachedUser.timestamp < CACHE_DURATION) && !force) {
         setUser(cachedUser.data);
         setIsLoading(false);
@@ -63,24 +90,21 @@ function useAuthStandalone(): AuthContextType {
         const data = await response.json();
         if (data.success && data.user) {
           // Update cache
-          cachedUser = {
-            data: data.user,
-            timestamp: now
-          };
+          setAuthCache(data.user);
           setUser(data.user);
         } else {
           // Clear cache if not authenticated
-          cachedUser = null;
+          setAuthCache(null);
           setUser(null);
         }
       } else {
         // Clear cache on error
-        cachedUser = null;
+        setAuthCache(null);
         setUser(null);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      cachedUser = null;
+      setAuthCache(null);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -101,8 +125,12 @@ function useAuthStandalone(): AuthContextType {
 
       const data = await response.json();
       
-      if (response.ok) {
-        // Force refresh user data after successful login
+      if (response.ok && data.user) {
+        // Set user in state and localStorage immediately
+        setUser(data.user);
+        setAuthCache(data.user);
+      } else if (response.ok) {
+        // Force refresh user data after successful login if no user data returned
         await checkAuth(true);
       }
       
@@ -128,7 +156,7 @@ function useAuthStandalone(): AuthContextType {
       });
       
       // Clear cache and state
-      cachedUser = null;
+      setAuthCache(null);
       setUser(null);
       
       // Redirect to login page
