@@ -1,72 +1,42 @@
 import { NextResponse } from 'next/server';
-import { parseToken } from '@/lib/auth';
-import { getMongoDb } from '@/lib/db';
-import { ObjectId } from 'mongodb';
+import { withAuth } from '@/middleware/auth';
+import type { AuthRequest } from '@/types/auth';
 
-export async function GET(request: Request) {
+// This endpoint verifies the authentication status of the current user
+export const GET = withAuth(async (request: AuthRequest) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.split(' ')[1];
+    // If we get here, the user is authenticated
+    const { user } = request;
     
-    if (!token) {
-      return NextResponse.json(
-        { valid: false, message: 'No token provided' },
-        { status: 401 }
-      );
-    }
-    
-    // Parse the token to get user ID
-    const tokenData = parseToken(token);
-    if (!tokenData) {
-      return NextResponse.json(
-        { valid: false, message: 'Invalid token format' },
-        { status: 401 }
-      );
-    }
-    
-    // Connect to database
-    const db = await getMongoDb();
-    const usersCollection = db.collection('users');
-    
-    // Find user by ID
-    const user = await usersCollection.findOne({ _id: new ObjectId(tokenData.userId) });
-    
-    if (!user) {
-      return NextResponse.json(
-        { valid: false, message: 'User not found' },
-        { status: 404 }
-      );
-    }
-    
-    // Check if token is still valid (not expired)
-    const tokenAge = Date.now() - tokenData.timestamp;
-    const maxTokenAge = 30 * 24 * 60 * 60 * 1000; // 30 days
-    
-    if (tokenAge > maxTokenAge) {
-      return NextResponse.json(
-        { valid: false, message: 'Token expired' },
-        { status: 401 }
-      );
-    }
-    
-    // Return user data without sensitive information
-    const { password, ...userData } = user;
-    
-    return NextResponse.json({ 
+    // Return user info without password
+    return NextResponse.json({
       valid: true,
       user: {
-        id: user._id.toString(),
+        id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role
-      }
+        name: user.name,
+        role: user.role,
+        balance: user.balance || { available: 0, frozen: 0 },
+        bank: user.bank || { name: '', accountNumber: '', accountHolder: '' },
+        verification: user.verification || { 
+          verified: false, 
+          cccdFront: '',
+          cccdBack: ''
+        },
+        status: {
+          active: user.status?.active ?? true,
+          betLocked: user.status?.betLocked ?? false,
+          withdrawLocked: user.status?.withdrawLocked ?? false,
+        },
+        lastLogin: user.lastLogin || null,
+      },
     });
-    
   } catch (error) {
-    console.error('Token verification error:', error);
+    console.error('Verify error:', error);
     return NextResponse.json(
-      { valid: false, message: 'Error verifying token' },
+      { valid: false, message: 'Internal server error' },
       { status: 500 }
     );
   }
-}
+});
