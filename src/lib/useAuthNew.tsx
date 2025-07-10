@@ -212,8 +212,18 @@ function useAuthStandalone(): AuthContextType {
 
   // Login function
   const login = async (username: string, password: string) => {
+    setIsLoading(true);
     try {
       console.debug('Attempting login for user:', username);
+      
+      // Kiểm tra cookie hiện tại trước khi đăng nhập
+      if (typeof document !== 'undefined') {
+        console.debug('Cookie state before login:', { 
+          hasCookies: document.cookie.length > 0,
+          cookieLength: document.cookie.length,
+          cookies: document.cookie
+        });
+      }
       
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -226,36 +236,22 @@ function useAuthStandalone(): AuthContextType {
         credentials: 'include', // Explicitly include credentials
         cache: 'no-store',
       });
-
       const data = await response.json();
-      
-      if (response.ok && data.user) {
-        console.debug('Login successful, user data received');
-        // Set user in state and localStorage immediately
-        setUser(data.user);
+      if (data.success) {
+        console.debug('Login successful:', data);
+        // Update cache
         setAuthCache(data.user);
-        setLastChecked(Date.now());
-        
-        // Reset path tracking to prevent immediate redirects
-        lastPathRef.current = pathname;
-      } else if (response.ok) {
-        console.debug('Login successful but no user data, fetching user data');
-        // Force refresh user data after successful login if no user data returned
-        await checkAuth(true);
+        setUser(data.user);
+        return { success: true, message: 'Đăng nhập thành công' };
       } else {
-        console.error('Login failed with status:', response.status);
+        console.debug('Login failed:', data);
+        return { success: false, message: 'Đăng nhập thất bại' };
       }
-      
-      return {
-        success: response.ok,
-        message: data.message
-      };
     } catch (error) {
-      console.error('Login failed with error:', error);
-      return {
-        success: false,
-        message: 'Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại sau.'
-      };
+      console.error('Login error:', error);
+      return { success: false, message: 'Có lỗi xảy ra khi đăng nhập' };
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -347,66 +343,106 @@ function useAuthStandalone(): AuthContextType {
   }, [checkAuth, pathname, lastChecked]);
 
   // Expose a way to check if we're on a protected page that requires auth
-  const requiresAuth = useCallback(() => {
-    // List of public paths that don't require authentication
+  const requiresAuth = (path: string): boolean => {
+    // Public paths that don't require authentication
     const publicPaths = [
       '/',
-      '/login', 
-      '/register', 
-      '/auth/login', 
-      '/auth/register',
+      '/login',
+      '/register',
       '/forgot-password',
       '/reset-password'
     ];
 
-    // Check if the current path is public
-    const isPublic = publicPaths.some(p => 
-      pathname === p || 
-      pathname?.startsWith(`${p}/`)
-    );
-    
-    const isSystemPath = 
-      pathname?.startsWith('/_next/') ||
-      pathname?.startsWith('/api/') ||
-      pathname?.includes('favicon.ico');
-      
-    return !isPublic && !isSystemPath;
-  }, [pathname]);
+    // Public paths that start with these prefixes
+    const publicPathPrefixes = [
+      '/api/public',
+      '/_next',
+      '/favicon',
+      '/static',
+    ];
 
+    // Check if the path exactly matches a public path
+    const isExactPublicPath = publicPaths.includes(path);
+    
+    // Check if the path starts with a public prefix
+    const hasPublicPrefix = publicPathPrefixes.some(prefix => path.startsWith(prefix));
+    
+    // Special handling for root and sub-paths
+    const isPublicSubPath = publicPaths.some(publicPath => {
+      // Skip the root path for this check to prevent everything being public
+      if (publicPath === '/') return false;
+      return path.startsWith(`${publicPath}/`);
+    });
+
+    const isPublicPath = isExactPublicPath || hasPublicPrefix || isPublicSubPath;
+
+    console.debug('requiresAuth check:', { 
+      path, 
+      isPublicPath, 
+      isExactPublicPath, 
+      hasPublicPrefix, 
+      isPublicSubPath 
+    });
+    
+    return !isPublicPath;
+  };
+
+  // Function to handle auth redirects based on path and auth state
+  const handleAuthRedirect = useCallback((path: string): void => {
+    console.debug('handleAuthRedirect called for path:', path);
+    
+    // Prevent redirect loops
+    if (path === lastPathRef.current) {
+      console.debug('Skipping redirect - same as last path');
+      return;
+    }
+    
+    // Update last path reference
+    lastPathRef.current = path;
+    
+    const isPathProtected = requiresAuth(path);
+    const isUserAuthenticated = !!user;
+    const isAuthLoading = isLoading;
+    
+    console.debug('Auth redirect check:', { 
+      path, 
+      isPathProtected, 
+      isUserAuthenticated,
+      isAuthLoading,
+      hasUser: !!user,
+      username: user?.username || null,
+      lastChecked
+    });
+    
+    // Don't redirect while still loading auth state
+    if (isAuthLoading) {
+      console.debug('Skipping redirect - auth state still loading');
+      return;
+    }
+    
+    if (isPathProtected && !isUserAuthenticated && lastChecked > 0) {
+      console.debug('Redirecting unauthenticated user from protected page');
+      // Build the return URL
+      const returnUrl = path || '/';
+      router.push(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+    } else if (path === '/login' && isUserAuthenticated) {
+      console.debug('Redirecting authenticated user from login page');
+      router.push('/');
+    }
+  }, [user, isLoading, router, requiresAuth, lastChecked]);
+  
   // Auto redirect to login if on protected page without auth
   useEffect(() => {
-    const handleAuthRedirect = async () => {
-      // Only proceed if:
-      // 1. We're not loading auth state
-      // 2. User is NOT authenticated
-      // 3. Current page requires authentication
-      // 4. We're not already on the login page
-      // 5. We've already done at least one auth check
-      
-      console.debug('Auth state:', {
-        isLoading, 
-        isAuthenticated: !!user, 
-        requiresAuth: requiresAuth(),
-        pathname,
-        lastChecked
-      });
-      
-      if (!isLoading && !user && requiresAuth() && pathname !== '/login' && lastChecked > 0) {
-        console.debug('Redirecting unauthenticated user from protected page');
-        // Build the return URL
-        const returnUrl = pathname || '/';
-        router.push(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
-      }
-    };
+    if (!pathname) return;
     
     // Add a small delay before redirect to avoid flash during initial load
     // This gives time for the auth check to complete
     const timeoutId = setTimeout(() => {
-      handleAuthRedirect();
+      handleAuthRedirect(pathname);
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [isLoading, user, pathname, router, requiresAuth, lastChecked]);
+  }, [pathname, handleAuthRedirect]);
 
   return {
     user,
