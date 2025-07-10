@@ -55,7 +55,7 @@ export function withAuth(handler: Function, roles: string[] = ['user']) {
     }
 
     // Check role if specified
-    if (roles.length > 0 && !roles.includes(user.role)) {
+    if (roles.length > 0 && user && !roles.includes(user.role)) {
       return NextResponse.json(
         { success: false, message: 'Forbidden: Insufficient permissions' },
         { status: 403 }
