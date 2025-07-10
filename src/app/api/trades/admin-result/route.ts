@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
 import { parseSessionId } from '@/lib/sessionUtils';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request });
-    if (!token) {
+    const user = await verifyToken(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: 'Chưa đăng nhập' },
+        { success: false, message: 'Chưa đăng nhập hoặc phiên đăng nhập đã hết hạn' },
         { status: 401 }
       );
     }
@@ -50,6 +50,14 @@ export async function GET(request: NextRequest) {
         }
       ]
     });
+
+    // Kiểm tra quyền admin
+    if (user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, message: 'Không có quyền truy cập' },
+        { status: 403 }
+      );
+    }
 
     if (!adminResult) {
       return NextResponse.json(

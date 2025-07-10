@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ req: request });
-    if (!token?.email) {
+    const user = await verifyToken(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, message: 'Chưa đăng nhập' },
+        { success: false, message: 'Chưa đăng nhập hoặc phiên đăng nhập đã hết hạn' },
         { status: 401 }
       );
     }
@@ -28,16 +28,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Cập nhật trạng thái giao dịch
-    await db.collection('trades').updateOne(
-      { _id: tradeId },
-      {
-        $set: {
-          status: 'completed',
-          result,
-          profit: profit || 0,
-          completedAt: new Date(),
-        },
-      }
+    const result = await db.collection('trades').updateOne(
+      { _id: new ObjectId(tradeId), userId: user.id },
+      { $set: { status: 'completed', result, profit, updatedAt: new Date() } }
     );
 
     // Cập nhật số dư người dùng nếu có lợi nhuận
