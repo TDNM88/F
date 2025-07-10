@@ -89,7 +89,7 @@ export function useAuthStandalone() {
   // Refs for auth status checks
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastPathRef = useRef<string>('');
-  const lastRedirectTimeRef = useRef<number>(0); // Lưu thời gian chuyển hướng gần nhất để tránh loops
+  const lastRedirectTimeRef = useRef<number>(0); // Lưu thởi gian chuyển hướng gần nhất để tránh loops
   const router = useRouter();
   const pathname = usePathname();
 
@@ -105,6 +105,15 @@ export function useAuthStandalone() {
       });
       return;
     }
+
+    // Check for token cookie before making request
+    const tokenCookie = document.cookie.split('; ').find(row => row.startsWith('token='));
+    debugLog('Token cookie check before auth request', {
+      tokenExists: !!tokenCookie,
+      tokenLength: tokenCookie ? tokenCookie.split('=')[1].length : 0,
+      tokenValue: tokenCookie ? tokenCookie.split('=')[1].substring(0, 10) + '...' : 'N/A',
+      allCookies: document.cookie.split('; ').map(c => c.split('=')[0])
+    });
 
     try {
       // Show loading state only for initial check
@@ -125,6 +134,10 @@ export function useAuthStandalone() {
         }
       });
       
+      debugLog('Auth request headers', {
+        headers: Object.fromEntries(Array.from(response.headers.entries()))
+      });
+
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -187,6 +200,10 @@ export function useAuthStandalone() {
         credentials: 'include', // Explicitly include credentials
         cache: 'no-store',
       });
+      debugLog('Login request headers', {
+        headers: Object.fromEntries(Array.from(response.headers.entries()))
+      });
+
       const data = await response.json();
       if (data.success) {
         debugLog('Login successful:', data);
@@ -217,7 +234,7 @@ export function useAuthStandalone() {
       setLastChecked(0);
       
       // Then attempt server logout
-      await fetch('/api/auth/logout', {
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -226,7 +243,10 @@ export function useAuthStandalone() {
         },
         cache: 'no-store',
       });
-      
+      debugLog('Logout request headers', {
+        headers: Object.fromEntries(Array.from(response.headers.entries()))
+      });
+
       // Redirect to login page
       router.push('/login');
     } catch (error) {
@@ -326,7 +346,7 @@ export function useAuthStandalone() {
     if (user && isAuthPath) {
       debugLog('Redirecting to home - Already authenticated user on auth page');
       router.push('/');
-      lastRedirectTimeRef.current = now; // Cập nhật thời gian chuyển hướng
+      lastRedirectTimeRef.current = now; // Cập nhật thởi gian chuyển hướng
       return;
     }
 
@@ -334,7 +354,7 @@ export function useAuthStandalone() {
     if (needsRedirect) {
       debugLog('Redirecting to login - Authentication required');
       router.push('/login');
-      lastRedirectTimeRef.current = now; // Cập nhật thời gian chuyển hướng
+      lastRedirectTimeRef.current = now; // Cập nhật thởi gian chuyển hướng
       return;
     }
   }, [user, isLoading, router, requiresAuth, lastChecked]);
