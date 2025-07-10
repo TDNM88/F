@@ -4,7 +4,8 @@ import { useState, useEffect, createContext, useContext, useCallback, useRef } f
 import { useRouter, usePathname } from 'next/navigation';
 import { User } from '@/types/auth';
 
-export interface AuthContextType {
+// Export interface sử dụng type keyword để đảm bảo Next.js/TypeScript hiểu và xử lý chính xác
+export type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
@@ -345,13 +346,17 @@ function useAuthStandalone(): AuthContextType {
     ];
 
     // Check if the current path is public
-    return !publicPaths.some(p => 
+    const isPublic = publicPaths.some(p => 
       pathname === p || 
-      pathname?.startsWith(`${p}/`) ||
+      pathname?.startsWith(`${p}/`)
+    );
+    
+    const isSystemPath = 
       pathname?.startsWith('/_next/') ||
       pathname?.startsWith('/api/') ||
-      pathname?.includes('favicon.ico')
-    );
+      pathname?.includes('favicon.ico');
+      
+    return !isPublic && !isSystemPath;
   }, [pathname]);
 
   // Auto redirect to login if on protected page without auth
@@ -359,10 +364,19 @@ function useAuthStandalone(): AuthContextType {
     const handleAuthRedirect = async () => {
       // Only proceed if:
       // 1. We're not loading auth state
-      // 2. User is not authenticated
+      // 2. User is NOT authenticated
       // 3. Current page requires authentication
       // 4. We're not already on the login page
       // 5. We've already done at least one auth check
+      
+      console.debug('Auth state:', {
+        isLoading, 
+        isAuthenticated: !!user, 
+        requiresAuth: requiresAuth(),
+        pathname,
+        lastChecked
+      });
+      
       if (!isLoading && !user && requiresAuth() && pathname !== '/login' && lastChecked > 0) {
         console.debug('Redirecting unauthenticated user from protected page');
         // Build the return URL
