@@ -43,7 +43,7 @@ export async function authenticateRequest(request: NextRequest) {
   }
 }
 
-export async function withAuth(handler: any, roles: string[] = ['user']) {
+export function withAuth(handler: Function, roles: string[] = ['user']) {
   return async (request: NextRequest) => {
     const { user, error } = await authenticateRequest(request);
     
@@ -62,8 +62,20 @@ export async function withAuth(handler: any, roles: string[] = ['user']) {
       );
     }
 
-    // Add user to request object
-    request.user = user;
-    return handler(request);
+    // Create a new request object with the user attached to avoid modifying NextRequest directly
+    const authRequest = request as any;
+    authRequest.user = user;
+    
+    try {
+      // Make sure handler is properly awaited to prevent Promise errors
+      const result = await handler(authRequest);
+      return result;
+    } catch (error) {
+      console.error('Handler error in withAuth:', error);
+      return NextResponse.json(
+        { success: false, message: 'Internal server error' },
+        { status: 500 }
+      );
+    }
   };
 }
