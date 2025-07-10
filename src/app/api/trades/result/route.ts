@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { verifyToken } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
+import { ObjectId } from 'mongodb';
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,15 +29,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Cập nhật trạng thái giao dịch
-    const result = await db.collection('trades').updateOne(
-      { _id: new ObjectId(tradeId), userId: user._id },
+    const updateResult = await db.collection('trades').updateOne(
+      { _id: new ObjectId(tradeId), userId: new ObjectId(user._id) },
       { $set: { status: 'completed', result, profit, updatedAt: new Date() } }
     );
 
     // Cập nhật số dư người dùng nếu có lợi nhuận
     if (profit > 0) {
       await db.collection('users').updateOne(
-        { _id: user._id },
+        { _id: new ObjectId(user._id) },
         { $inc: { 'balance.available': profit } }
       );
     }

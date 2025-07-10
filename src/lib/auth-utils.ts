@@ -26,7 +26,7 @@ export async function verifyToken(req: NextRequest): Promise<User | null> {
       throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
     
-    const user = await db.collection('users').findOne({ _id: decoded.id });
+    const user = await db.collection('users').findOne({ _id: decoded._id });
     
     if (!user) {
       return null;
