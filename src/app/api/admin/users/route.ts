@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/lib/auth-utils';
 import { getMongoDb } from '@/lib/db';
 import { NextRequest } from 'next/server';
 import { ObjectId } from 'mongodb';
@@ -14,22 +14,18 @@ interface User {
 export async function GET(request: NextRequest) {
   try {
     // Xác thực admin
-    const token = await getToken({ 
-      req: request as unknown as Request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
+    const user = await verifyToken(request);
     
-    if (!token) {
-      return NextResponse.json({ message: 'Chưa đăng nhập' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ message: 'Chưa đăng nhập hoặc phiên đăng nhập đã hết hạn' }, { status: 401 });
     }
     
     const db = await getMongoDb();
     if (!db) {
-      throw new Error('Could not connect to database');
+      throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
     
-    const user = await db.collection('users').findOne<User>({ _id: new ObjectId(token.sub) });
-    if (!user || user.role !== 'admin') {
+    if (user.role !== 'admin') {
       return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
     }
 
@@ -102,22 +98,19 @@ export async function GET(request: NextRequest) {
 // API cập nhật trạng thái người dùng
 export async function PUT(request: NextRequest) {
   try {
-    const token = await getToken({ 
-      req: request as unknown as Request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
+    // Xác thực admin
+    const user = await verifyToken(request);
     
-    if (!token) {
-      return NextResponse.json({ message: 'Chưa đăng nhập' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ message: 'Chưa đăng nhập hoặc phiên đăng nhập đã hết hạn' }, { status: 401 });
     }
     
     const db = await getMongoDb();
     if (!db) {
-      throw new Error('Could not connect to database');
+      throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
     
-    const user = await db.collection('users').findOne<User>({ _id: new ObjectId(token.sub) });
-    if (!user || user.role !== 'admin') {
+    if (user.role !== 'admin') {
       return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
     }
 
@@ -158,22 +151,19 @@ export async function PUT(request: NextRequest) {
 // API xóa người dùng
 export async function DELETE(request: NextRequest) {
   try {
-    const token = await getToken({ 
-      req: request as unknown as Request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
+    // Xác thực admin
+    const user = await verifyToken(request);
     
-    if (!token) {
-      return NextResponse.json({ message: 'Chưa đăng nhập' }, { status: 401 });
+    if (!user) {
+      return NextResponse.json({ message: 'Chưa đăng nhập hoặc phiên đăng nhập đã hết hạn' }, { status: 401 });
     }
     
     const db = await getMongoDb();
     if (!db) {
-      throw new Error('Could not connect to database');
+      throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
     
-    const user = await db.collection('users').findOne<User>({ _id: new ObjectId(token.sub) });
-    if (!user || user.role !== 'admin') {
+    if (user.role !== 'admin') {
       return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
     }
 

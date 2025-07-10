@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
-import { getToken } from 'next-auth/jwt';
-import { authConfig } from '@/auth.config';
+import { verifyToken } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
 import { parseSessionId } from '@/lib/sessionUtils';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ 
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
-    if (!token) {
+    const user = await verifyToken(request);
+    if (!user || user.role !== 'admin') {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -62,11 +58,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ 
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
-    if (!token) {
+    const user = await verifyToken(request);
+    
+    if (!user || user.role !== 'admin') {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }

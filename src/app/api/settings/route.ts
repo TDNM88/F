@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/lib/auth-utils';
 import { connectToDatabase } from '@/lib/db';
 import SiteSettings from '@/models/SiteSettings';
 import { Types } from 'mongoose';
+import { NextRequest } from 'next/server';
 
 export async function GET() {
   try {
@@ -27,11 +28,11 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const token = await getToken({ req: request as any });
+    const user = await verifyToken(request);
     
-    if (!token) {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

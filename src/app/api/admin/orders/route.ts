@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
-import { getToken } from 'next-auth/jwt';
+import { verifyToken } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ 
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET
-    });
+    const user = await verifyToken(request);
     
-    if (!token) {
+    if (!user || user.role !== 'admin') {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
