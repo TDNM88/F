@@ -1,24 +1,29 @@
-import { NextResponse } from "next/server"
+import { NextResponse } from 'next/server';
+import { withAuth } from '@/middleware/auth';
+import type { AuthRequest } from '@/types/auth';
 
-export async function POST() {
+export const POST = withAuth(async (request: AuthRequest) => {
   try {
     const response = NextResponse.json({
       success: true,
-      message: "Đăng xuất thành công",
-    })
+      message: 'Đăng xuất thành công',
+    });
 
     // Clear the token cookie
-    response.cookies.set("token", "", {
+    response.cookies.set('token', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 0,
-      path: "/",
-      sameSite: "lax",
-    })
+      path: '/',
+      sameSite: 'lax',
+    });
 
-    return response
+    return response;
   } catch (error) {
-    console.error("Logout error:", error)
-    return NextResponse.json({ success: false, message: "Lỗi hệ thống" }, { status: 500 })
+    console.error('Logout error:', error);
+    return NextResponse.json(
+      { success: false, message: 'Lỗi hệ thống' },
+      { status: 500 }
+    );
   }
-}
+});
