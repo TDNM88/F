@@ -5,15 +5,23 @@ import { getMongoDb } from '@/lib/db';
 import { ObjectId } from 'mongodb';
 
 export async function authenticateRequest(request: NextRequest) {
-  const cookies = request.cookies.get('token')?.value;
+  const token = request.cookies.get('token')?.value;
   
-  if (!cookies) {
+  console.debug('Authenticating request:', { 
+    hasToken: !!token, 
+    url: request.url,
+    cookieKeys: Array.from(request.cookies.getAll()).map(c => c.name),
+  });
+  
+  if (!token) {
+    console.debug('Authentication failed: No token provided');
     return { user: null, error: 'No token provided' };
   }
 
-  const tokenData = parseToken(cookies);
+  const tokenData = parseToken(token);
   if (!tokenData) {
-    return { user: null, error: 'Invalid token' };
+    console.debug('Authentication failed: Invalid token format');
+    return { user: null, error: 'Invalid token format' };
   }
 
   // Check token expiry (7 days)
@@ -45,11 +53,13 @@ export async function authenticateRequest(request: NextRequest) {
 
 export function withAuth(handler: Function, roles: string[] = ['user']) {
   return async (request: NextRequest) => {
+    console.debug('withAuth middleware called for URL:', request.url);
     const { user, error } = await authenticateRequest(request);
     
-    if (error) {
+    if (error || !user) {
+      console.debug('Authentication failed:', { error, hasUser: !!user });
       return NextResponse.json(
-        { success: false, message: 'Unauthorized: ' + error },
+        { success: false, message: 'Unauthorized: ' + (error || 'No user found') },
         { status: 401 }
       );
     }

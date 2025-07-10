@@ -123,15 +123,29 @@ function useAuthStandalone(): AuthContextType {
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
       
       try {
+        // Log cookie status from document.cookie (if in browser)
+        if (typeof document !== 'undefined') {
+          console.debug('Cookie status before fetch:', {
+            hasCookies: document.cookie.length > 0,
+            cookieLength: document.cookie.length,
+            hasTokenCookie: document.cookie.includes('token='),
+          });
+        }
+        
+        console.debug('Fetching user from /api/auth/me');
+        
         const response = await fetch('/api/auth/me', {
+          method: 'GET',
           credentials: 'include', // Explicitly include credentials for all requests
           headers: {
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Pragma': 'no-cache',
+            'Accept': 'application/json'
           },
           signal: controller.signal,
           // Force timestamp to prevent browser caching
-          cache: 'no-store'
+          cache: 'no-store',
+          mode: 'cors' // Ensure CORS is handled correctly
         });
 
         clearTimeout(timeoutId);
