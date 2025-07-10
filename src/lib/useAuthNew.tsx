@@ -4,7 +4,7 @@ import { useState, useEffect, createContext, useContext, useCallback } from 'rea
 import { useRouter } from 'next/navigation';
 import { User } from '@/types/auth';
 
-type AuthContextType = {
+export type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
