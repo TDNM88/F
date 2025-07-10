@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { User } from '@/types/auth';
 
 export type AuthContextType = {
@@ -61,55 +61,90 @@ function setAuthCache(userData: User | null): void {
 function useAuthStandalone(): AuthContextType {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastChecked, setLastChecked] = useState<number>(0);
   const router = useRouter();
+  const pathname = usePathname();
 
   // Check authentication status
   const checkAuth = useCallback(async (force = false) => {
     try {
       const now = Date.now();
       
+      // Throttle frequent checks (except when forced)
+      if (!force && lastChecked > 0 && (now - lastChecked) < 5000) {
+        return; // Avoid checking more than once every 5 seconds
+      }
+
       // Check cache first
       const cachedUser = getAuthCache();
       if (cachedUser && (now - cachedUser.timestamp < CACHE_DURATION) && !force) {
         setUser(cachedUser.data);
         setIsLoading(false);
+        setLastChecked(now);
         return;
       }
 
       setIsLoading(true);
       
-      // Fetch user data from /api/auth/me
-      const response = await fetch('/api/auth/me', {
-        credentials: 'same-origin',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      });
+      // Fetch user data from /api/auth/me with timeout to handle network issues
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'same-origin',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+          signal: controller.signal
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.user) {
-          // Update cache
-          setAuthCache(data.user);
-          setUser(data.user);
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            // Update cache
+            setAuthCache(data.user);
+            setUser(data.user);
+          } else {
+            // Clear cache if not authenticated
+            setAuthCache(null);
+            setUser(null);
+          }
         } else {
-          // Clear cache if not authenticated
-          setAuthCache(null);
-          setUser(null);
+          // For auth errors (401, 403), clear cache
+          if (response.status === 401 || response.status === 403) {
+            setAuthCache(null);
+            setUser(null);
+          } else {
+            // For other errors (500, etc.), keep existing state if we have it
+            console.error('Auth check failed with status:', response.status);
+            
+            // If we have cached data, keep using it during server errors
+            if (cachedUser && !force) {
+              setUser(cachedUser.data);
+            }
+          }
         }
-      } else {
-        // Clear cache on error
-        setAuthCache(null);
-        setUser(null);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.error('Fetch error:', fetchError);
+        
+        // Network error - keep existing auth state if we have it
+        if (cachedUser && !force) {
+          console.log('Using cached user data during network error');
+          setUser(cachedUser.data);
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      setAuthCache(null);
-      setUser(null);
+      // Don't clear cache on general errors - only clear on explicit auth failures
     } finally {
       setIsLoading(false);
+      setLastChecked(Date.now());
     }
-  }, []);
+  }, [lastChecked]);  // Added lastChecked dependency
 
   // Login function
   const login = async (username: string, password: string) => {
@@ -158,11 +193,16 @@ function useAuthStandalone(): AuthContextType {
       // Clear cache and state
       setAuthCache(null);
       setUser(null);
+      setLastChecked(0);
       
       // Redirect to login page
       router.push('/login');
     } catch (error) {
       console.error('Logout failed:', error);
+      // Still clear local state and cache even if server logout fails
+      setAuthCache(null);
+      setUser(null);
+      setLastChecked(0);
     }
   };
 
@@ -176,10 +216,64 @@ function useAuthStandalone(): AuthContextType {
     return user?.role === 'admin';
   }, [user]);
 
-  // Initial auth check
+  // Auth check on initial load and pathname changes
   useEffect(() => {
+    // Initial auth check and when pathname changes
     checkAuth();
-  }, [checkAuth]);
+    
+    // Setup an interval to periodically check auth status in background
+    // This ensures session remains valid during long periods of inactivity
+    const intervalId = setInterval(() => {
+      // Only do a background refresh if the last check was more than 5 minutes ago
+      const now = Date.now();
+      if (now - lastChecked > 5 * 60 * 1000) {
+        checkAuth();
+      }
+    }, 10 * 60 * 1000); // Check every 10 minutes
+    
+    return () => clearInterval(intervalId);
+  }, [checkAuth, pathname]); // Added pathname dependency
+
+  // Expose a way to check if we're on a protected page that requires auth
+  const requiresAuth = useCallback(() => {
+    // List of public paths that don't require authentication
+    const publicPaths = [
+      '/',
+      '/login', 
+      '/register', 
+      '/auth/login', 
+      '/auth/register',
+      '/forgot-password',
+      '/reset-password'
+    ];
+
+    // Check if the current path is public
+    return !publicPaths.some(p => 
+      pathname === p || 
+      pathname?.startsWith(`${p}/`) ||
+      pathname?.startsWith('/_next/') ||
+      pathname?.startsWith('/api/') ||
+      pathname?.includes('favicon.ico')
+    );
+  }, [pathname]);
+
+  // Auto redirect to login if on protected page without auth
+  useEffect(() => {
+    const handleAuthRedirect = async () => {
+      // Only proceed if:
+      // 1. We're not loading auth state
+      // 2. User is not authenticated
+      // 3. Current page requires authentication
+      // 4. We're not already on the login page
+      if (!isLoading && !user && requiresAuth() && pathname !== '/login') {
+        // Build the return URL
+        const returnUrl = pathname || '/';
+        router.push(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+      }
+    };
+    
+    handleAuthRedirect();
+  }, [isLoading, user, pathname, router, requiresAuth]);
 
   return {
     user,
