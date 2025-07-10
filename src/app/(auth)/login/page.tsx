@@ -125,7 +125,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Tên đăng nhập</Label>
+              <Label htmlFor="username" id="username-label">Tên đăng nhập</Label>
               <Input
                 id="username"
                 type="text"
@@ -135,11 +135,12 @@ export default function LoginPage() {
                 minLength={3}
                 placeholder="Nhập tên đăng nhập"
                 disabled={isLoading}
+                aria-labelledby="username-label"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Mật khẩu</Label>
+              <Label htmlFor="password" id="password-label">Mật khẩu</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -150,6 +151,7 @@ export default function LoginPage() {
                   minLength={6}
                   placeholder="Nhập mật khẩu"
                   disabled={isLoading}
+                  aria-labelledby="password-label"
                 />
                 <Button
                   type="button"

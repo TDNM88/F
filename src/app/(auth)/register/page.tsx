@@ -145,7 +145,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Tên đăng nhập</Label>
+              <Label htmlFor="username" id="username-label">Tên đăng nhập</Label>
               <Input
                 id="username"
                 name="username"
@@ -156,11 +156,12 @@ export default function RegisterPage() {
                 minLength={3}
                 placeholder="Nhập tên đăng nhập (ít nhất 3 ký tự)"
                 disabled={isLoading}
+                aria-labelledby="username-label"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Mật khẩu</Label>
+              <Label htmlFor="password" id="password-label">Mật khẩu</Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -172,6 +173,7 @@ export default function RegisterPage() {
                   minLength={6}
                   placeholder="Nhập mật khẩu (ít nhất 6 ký tự)"
                   disabled={isLoading}
+                  aria-labelledby="password-label"
                 />
                 <Button
                   type="button"
@@ -187,7 +189,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Nhập lại mật khẩu</Label>
+              <Label htmlFor="confirmPassword" id="confirmPassword-label">Nhập lại mật khẩu</Label>
               <div className="relative">
                 <Input
                   id="confirmPassword"
@@ -199,6 +201,7 @@ export default function RegisterPage() {
                   minLength={6}
                   placeholder="Nhập lại mật khẩu"
                   disabled={isLoading}
+                  aria-labelledby="confirmPassword-label"
                 />
                 <Button
                   type="button"
