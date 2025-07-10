@@ -51,10 +51,14 @@ export async function POST(request: Request) {
     // Trong development, httpOnly:false giúp client script đọc cookie để debug
     console.debug('Setting auth cookie token:', { tokenLength: token.length });
     
+    // Định nghĩa thời gian sống của token - 7 ngày
+    const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+    const TOKEN_MAX_AGE_SEC = Math.floor(TOKEN_MAX_AGE_MS / 1000); // Convert to seconds for cookie API
+    
     response.cookies.set('token', token, {
       httpOnly: process.env.NODE_ENV === 'production', // Tắt httpOnly trong development để debug
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+      maxAge: TOKEN_MAX_AGE_SEC, // Next.js cookies API sử dụng seconds
       path: '/',
       sameSite: 'lax',
     });

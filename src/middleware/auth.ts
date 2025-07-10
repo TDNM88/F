@@ -4,6 +4,16 @@ import { parseToken } from '@/lib/auth';
 import { getMongoDb } from '@/lib/db';
 import { ObjectId } from 'mongodb';
 
+// Thời gian sống của token - 7 ngày
+const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
+// Helper để kiểm soát logging
+const debugLog = (message: string, data?: any) => {
+  if (process.env.DEBUG_AUTH === 'true' || process.env.NODE_ENV !== 'production') {
+    console.debug(`[Auth Debug] ${message}`, data);
+  }
+};
+
 /**
  * Xác thực yêu cầu dựa trên token trong cookie
  * 
@@ -14,55 +24,72 @@ export async function authenticateRequest(request: NextRequest) {
   try {
     const token = request.cookies.get('token')?.value;
     
-    console.debug('Authenticating request:', { 
+    debugLog('Authenticating request', { 
       hasToken: !!token, 
-      url: request.url,
+      url: request.url.split('?')[0], // Lấy URL cơ bản không có query params
       cookieCount: request.cookies.getAll().length,
-      cookieKeys: Array.from(request.cookies.getAll()).map(c => c.name),
+      // Không log tên các cookie - cải thiện bảo mật
     });
     
     if (!token) {
-      console.debug('Authentication failed: No token provided');
+      debugLog('Authentication failed', { reason: 'No token provided' });
       return { user: null, error: 'No token provided' };
     }
     
     // Debug log token content length without revealing it
-    console.debug(`Token found with length: ${token.length}`);
+    debugLog('Token found', { length: token.length });
 
     const tokenData = parseToken(token);
     if (!tokenData) {
-      console.debug('Authentication failed: Invalid token format');
+      debugLog('Authentication failed', { reason: 'Invalid token format' });
       return { user: null, error: 'Invalid token format' };
     }
     
-    console.debug('Token parsed successfully:', { userId: tokenData.userId });
+    // Giảm thiểu log thông tin nhạy cảm
+    debugLog('Token parsed successfully', { 
+      userId: tokenData.userId ? tokenData.userId.substring(0, 4) + '...' : null 
+    });
   
-    // Check token expiry (7 days)
+    // Check token expiry sử dụng hằng số đã định nghĩa
     const tokenAge = Date.now() - tokenData.timestamp;
-    const maxTokenAge = 7 * 24 * 60 * 60 * 1000; // 7 days
     
-    if (tokenAge > maxTokenAge) {
-      console.debug('Authentication failed: Token expired');
+    if (tokenAge > TOKEN_MAX_AGE_MS) {
+      debugLog('Authentication failed', { 
+        reason: 'Token expired', 
+        age: Math.floor(tokenAge / 1000 / 60 / 60) + ' hours'
+      });
       return { user: null, error: 'Token expired' };
     }
 
-    // Tìm user từ database
-    const db = await getMongoDb();
-    const user = await db.collection('users').findOne({
-      _id: new ObjectId(tokenData.userId)
-    });
+    // Tìm user từ database với xử lý lỗi tốt hơn
+    try {
+      const db = await getMongoDb();
+      const user = await db.collection('users').findOne({
+        _id: new ObjectId(tokenData.userId)
+      });
 
-    if (!user) {
-      console.debug('Authentication failed: User not found');
-      return { user: null, error: 'User not found' };
+      if (!user) {
+        debugLog('Authentication failed', { reason: 'User not found' });
+        return { user: null, error: 'User not found' };
+      }
+
+      // Remove sensitive data
+      const { password, ...userWithoutPassword } = user;
+      debugLog('Authentication successful', { 
+        username: user.username?.substring(0, 2) + '***', 
+        role: user.role 
+      });
+      return { user: userWithoutPassword, error: null };
+    } catch (dbError) {
+      // Xử lý riêng lỗi database
+      debugLog('Database error during authentication', { 
+        error: dbError instanceof Error ? dbError.message : 'Unknown error' 
+      });
+      return { user: null, error: 'Database error during authentication' };
     }
-
-    // Remove sensitive data
-    const { password, ...userWithoutPassword } = user;
-    console.debug('Authentication successful for user:', { username: user.username });
-    return { user: userWithoutPassword, error: null };
   } catch (error) {
-    console.error('Authentication error:', error);
+    // Xử lý các lỗi khác trong quá trình xác thực
+    console.error('Authentication error:', error instanceof Error ? error.message : 'Unknown error');
     return { user: null, error: 'Authentication failed' };
   }
 }
@@ -76,11 +103,17 @@ export async function authenticateRequest(request: NextRequest) {
  */
 export function withAuth(handler: Function, roles: string[] = ['user']) {
   return async (request: NextRequest) => {
-    console.debug('withAuth middleware called for URL:', request.url);
+    // Sử dụng debugLog thay cho console.debug
+    debugLog('withAuth middleware called', {
+      url: request.url.split('?')[0], // Không log query parameters vì có thể chứa thông tin nhạy cảm
+      method: request.method,
+      roles: roles,
+    });
+    
     const { user, error } = await authenticateRequest(request);
     
     if (error || !user) {
-      console.debug('Authentication failed:', { error, hasUser: !!user });
+      debugLog('Authentication failed in middleware', { error });
       return NextResponse.json(
         { success: false, message: 'Unauthorized: ' + (error || 'No user found') },
         { status: 401 }
@@ -89,9 +122,10 @@ export function withAuth(handler: Function, roles: string[] = ['user']) {
 
     // Check role if specified
     if (roles.length > 0 && user && !roles.includes(user.role)) {
-      console.debug('Authorization failed: Insufficient permissions', {
-        userRole: user.role, 
-        requiredRoles: roles
+      debugLog('Authorization failed', {
+        requiredRoles: roles,
+        // Không log thông tin cụ thể về người dùng
+        hasValidRole: false
       });
       return NextResponse.json(
         { success: false, message: 'Forbidden: Insufficient permissions' },
@@ -99,10 +133,10 @@ export function withAuth(handler: Function, roles: string[] = ['user']) {
       );
     }
 
-    console.debug('User authenticated successfully:', {
-      username: user.username,
+    debugLog('User authenticated successfully', {
+      // Bảo mật thông tin người dùng
       role: user.role,
-      path: request.url
+      path: request.url.split('?')[0]
     });
 
     // Create a new request object with the user attached to avoid modifying NextRequest directly
@@ -114,13 +148,18 @@ export function withAuth(handler: Function, roles: string[] = ['user']) {
       const result = await handler(authRequest);
       return result;
     } catch (error) {
-      console.error('Handler error in withAuth:', error);
+      // Xử lý lỗi tốt hơn và không để lộ thông tin nhạy cảm
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Handler error in withAuth:', errorMessage);
+      
+      // Chỉ trả về thông tin lỗi chi tiết trong môi trường development
       return NextResponse.json(
         { 
           success: false, 
           message: 'Internal server error',
-          _debug: process.env.NODE_ENV !== 'production' ? {
-            error: error instanceof Error ? error.message : String(error),
+          _debug: process.env.DEBUG_AUTH === 'true' || process.env.NODE_ENV !== 'production' ? {
+            error: errorMessage,
+            path: request.url.split('?')[0]
           } : undefined
         },
         { status: 500 }

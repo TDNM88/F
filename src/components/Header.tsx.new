@@ -237,12 +237,14 @@ export default function Header() {
                 Rút tiền
               </Link>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="mx-4 mb-4 bg-white border border-gray-300 text-gray-700 py-3 rounded-md flex justify-center items-center font-medium"
-            >
-              Đăng xuất
-            </button>
+            {user && (
+              <button 
+                onClick={handleLogout}
+                className="mx-4 mb-4 bg-white border border-gray-300 text-gray-700 py-3 rounded-md flex justify-center items-center font-medium"
+              >
+                Đăng xuất
+              </button>
+            )}
           </nav>
         </div>
       </div>

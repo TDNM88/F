@@ -1,10 +1,22 @@
 'use client'
 
-import { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, useContext, createContext } from 'react';
+import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { User } from '@/types/auth';
 
-// Export interface sử dụng type keyword để đảm bảo Next.js/TypeScript hiểu và xử lý chính xác
+// Storage keys
+const USER_STORAGE_KEY = 'auth_user';
+const LAST_CHECKED_KEY = 'auth_last_checked';
+
+// Helper function để kiểm soát logging
+const debugLog = (message: string, data?: any) => {
+  if (process.env.DEBUG_AUTH === 'true' || process.env.NODE_ENV !== 'production') {
+    console.debug(`[Auth Client] ${message}`, data);
+  }
+};
+
+// TypesScript hiểu và xử lý chính xác
 export type AuthContextType = {
   user: User | null;
   isLoading: boolean;
@@ -38,8 +50,7 @@ function getAuthCache(): { data: User | null; timestamp: number } | null {
     if (!cached) return null;
     
     const parsedCache = JSON.parse(cached);
-    // Log cache details for debugging
-    console.debug('Auth cache found', { 
+    debugLog('Auth cache found', { 
       created: new Date(parsedCache.timestamp).toLocaleString(),
       expiresIn: Math.round((parsedCache.timestamp + CACHE_DURATION - Date.now()) / (1000 * 60 * 60 * 24)) + ' days'
     });
@@ -68,160 +79,100 @@ function setAuthCache(userData: User | null): void {
   }
 }
 
-function useAuthStandalone(): AuthContextType {
+// Standalone auth hook for use in AuthProvider
+export function useAuthStandalone() {
+  // State
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastChecked, setLastChecked] = useState<number>(0);
-  const authCheckInProgressRef = useRef<boolean>(false);
+  
+  // Refs for auth status checks
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPathRef = useRef<string>('');
+  const lastRedirectTimeRef = useRef<number>(0); // Lưu thời gian chuyển hướng gần nhất để tránh loops
   const router = useRouter();
   const pathname = usePathname();
-  const lastPathRef = useRef<string | null>(null);
 
   // Check authentication status with improved resilience
   const checkAuth = useCallback(async (force = false) => {
-    // Prevent multiple simultaneous auth checks
-    if (authCheckInProgressRef.current) {
-      console.debug('Auth check already in progress, skipping duplicate request');
+    const currentTime = new Date().getTime();
+    const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+    
+    // Skip check if not forced and checked recently
+    if (!force && lastChecked && currentTime - lastChecked < cacheTimeout) {
+      debugLog('Skipping auth check - Recent check exists', {
+        timeSinceLastCheck: Math.floor((currentTime - lastChecked) / 1000) + 's'
+      });
       return;
     }
-    
+
     try {
-      authCheckInProgressRef.current = true;
-      const now = Date.now();
-      
-      // Throttle frequent checks (except when forced)
-      if (!force && lastChecked > 0 && (now - lastChecked) < 5000) {
-        console.debug('Auth check throttled', { timeSinceLastCheck: now - lastChecked });
-        authCheckInProgressRef.current = false;
-        return; // Avoid checking more than once every 5 seconds
-      }
-
-      // Always try cache first, even during forced refreshes
-      // This ensures we have something to display immediately
-      const cachedUser = getAuthCache();
-      if (cachedUser && cachedUser.data) {
-        // Always set user from cache first if available
-        setUser(cachedUser.data);
-        setIsLoading(false);
-        
-        // If cache is fresh and not forcing refresh, we can return early
-        if (!force && (now - cachedUser.timestamp < CACHE_DURATION)) {
-          console.debug('Using cached user data', { user: cachedUser.data.username });
-          setLastChecked(now);
-          authCheckInProgressRef.current = false;
-          return;
-        }
-      }
-
-      console.debug('Checking authentication with server');
-      if (force) {
+      // Show loading state only for initial check
+      const isInitialCheck = !lastChecked;
+      if (isInitialCheck) {
         setIsLoading(true);
+        debugLog('Initial auth check starting');
+      } else if (force) {
+        debugLog('Forced auth check starting');
       }
       
-      // Fetch user data from /api/auth/me with timeout to handle network issues
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-      
-      try {
-        // Log cookie status from document.cookie (if in browser)
-        if (typeof document !== 'undefined') {
-          console.debug('Cookie status before fetch:', {
-            hasCookies: document.cookie.length > 0,
-            cookieLength: document.cookie.length,
-            hasTokenCookie: document.cookie.includes('token='),
-          });
+      // Đảm bảo gửi credentials và tránh cache
+      const response = await fetch('/api/auth/me', { 
+        credentials: 'include', 
+        headers: { 
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
-        
-        console.debug('Fetching user from /api/auth/me');
-        
-        const response = await fetch('/api/auth/me', {
-          method: 'GET',
-          credentials: 'include', // Explicitly include credentials for all requests
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'Accept': 'application/json'
-          },
-          signal: controller.signal,
-          // Force timestamp to prevent browser caching
-          cache: 'no-store',
-          mode: 'cors' // Ensure CORS is handled correctly
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        debugLog('User authenticated from API', {
+          role: data.user?.role,
+          userId: data.user?.id ? String(data.user.id).substring(0, 4) + '...' : null
         });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            console.debug('Successfully authenticated with server', { user: data.user.username });
-            // Update cache
-            setAuthCache(data.user);
-            setUser(data.user);
-          } else {
-            console.debug('Server returned no auth error but no user data');
-            // Only clear if we're doing a force refresh or don't have cache
-            if (force || !cachedUser) {
-              setAuthCache(null);
-              setUser(null);
-            } else {
-              // Keep using cached data on weird server responses
-              console.debug('Keeping cached user data due to unusual server response');
-            }
-          }
-        } else {
-          // For explicit auth errors (401, 403), clear cache
-          if (response.status === 401 || response.status === 403) {
-            console.debug('Auth failed with status:', response.status);
-            setAuthCache(null);
-            setUser(null);
-          } else {
-            // For other errors (500, network issues, etc.), KEEP existing state
-            console.error('Auth check failed with status:', response.status);
-            
-            // If we have cached data, keep using it during server errors
-            if (cachedUser) {
-              console.debug('Keeping cached user data during server error');
-              // Refresh cache timestamp to avoid immediate re-requests
-              setAuthCache(cachedUser.data);
-              setUser(cachedUser.data);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error checking auth status:', error);
-        clearTimeout(timeoutId);
         
-        // ALWAYS keep existing user state on network errors
-        if (cachedUser) {
-          console.debug('Network error during auth check, keeping cached user data');
-          // Refresh cache timestamp to avoid immediate re-requests
-          setAuthCache(cachedUser.data);
-          setUser(cachedUser.data);
-        }
+        setUser(data.user);
+        // Store user data in localStorage with timestamp for caching
+        localStorage.setItem(
+          USER_STORAGE_KEY, 
+          JSON.stringify({
+            data: data.user,
+            timestamp: currentTime
+          })
+        );
+      } else {
+        // Clear user data on auth failure
+        debugLog('User not authenticated from API', {
+          status: response.status,
+          error: data.message || 'Authentication failed'
+        });
+        setUser(null);
+        localStorage.removeItem(USER_STORAGE_KEY);
       }
-      
-      setIsLoading(false);
-      setLastChecked(now);
-    } catch (e) {
-      console.error('Auth check error:', e);
-      setIsLoading(false);
+    } catch (error) {
+      console.error('Error checking auth status:', 
+        error instanceof Error ? error.message : 'Unknown error');
+      // Don't clear user on network errors to preserve offline experience
     } finally {
-      authCheckInProgressRef.current = false;
+      setIsLoading(false);
+      setLastChecked(currentTime);
+      localStorage.setItem(LAST_CHECKED_KEY, currentTime.toString());
     }
-  }, [lastChecked]);  // Added lastChecked dependency
+  }, [lastChecked]);
 
   // Login function
   const login = async (username: string, password: string) => {
     setIsLoading(true);
     try {
-      console.debug('Attempting login for user:', username);
+      debugLog('Attempting login for user:', username);
       
       // Kiểm tra cookie hiện tại trước khi đăng nhập
       if (typeof document !== 'undefined') {
-        console.debug('Cookie state before login:', { 
+        debugLog('Cookie state before login:', { 
           hasCookies: document.cookie.length > 0,
           cookieLength: document.cookie.length,
-          cookies: document.cookie
         });
       }
       
@@ -238,13 +189,13 @@ function useAuthStandalone(): AuthContextType {
       });
       const data = await response.json();
       if (data.success) {
-        console.debug('Login successful:', data);
+        debugLog('Login successful:', data);
         // Update cache
         setAuthCache(data.user);
         setUser(data.user);
         return { success: true, message: 'Đăng nhập thành công' };
       } else {
-        console.debug('Login failed:', data);
+        debugLog('Login failed:', data);
         return { success: false, message: 'Đăng nhập thất bại' };
       }
     } catch (error) {
@@ -258,7 +209,7 @@ function useAuthStandalone(): AuthContextType {
   // Logout function
   const logout = async () => {
     try {
-      console.debug('Logging out user');
+      debugLog('Logging out user');
       
       // Clear client-side auth state immediately
       setAuthCache(null);
@@ -296,138 +247,95 @@ function useAuthStandalone(): AuthContextType {
     return user?.role === 'admin';
   }, [user]);
 
-  // Enhanced auth check on initial load and pathname changes
-  useEffect(() => {
-    if (pathname !== lastPathRef.current) {
-      console.debug('Path changed from', lastPathRef.current, 'to', pathname);
-      lastPathRef.current = pathname;
-      
-      // Only do a soft check (using cache if available) on navigation
-      checkAuth(false);
-    }
+  // Check if current path requires authentication
+  const requiresAuth = useCallback((path: string): boolean => {
+    if (!path) return false;
     
-    // Initial check - prioritize cache then verify
-    if (!lastChecked) {
-      checkAuth(false);
-    }
-    
-    // Setup an interval to periodically check auth status in background
-    // This ensures session remains valid during long periods of inactivity
-    const intervalId = setInterval(() => {
-      // Only do a background refresh if the last check was more than 10 minutes ago
-      // and user is still in the application (document is visible)
-      const now = Date.now();
-      if (now - lastChecked > 10 * 60 * 1000 && document.visibilityState === 'visible') {
-        console.debug('Performing periodic background auth check');
-        checkAuth(false);
-      }
-    }, 15 * 60 * 1000); // Check every 15 minutes
-    
-    // Also check auth when tab becomes visible again
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const now = Date.now();
-        if (now - lastChecked > 5 * 60 * 1000) {
-          console.debug('Tab became visible, checking auth status');
-          checkAuth(false);
-        }
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [checkAuth, pathname, lastChecked]);
-
-  // Expose a way to check if we're on a protected page that requires auth
-  const requiresAuth = (path: string): boolean => {
-    // Public paths that don't require authentication
+    // Public paths - mở rộng danh sách
     const publicPaths = [
       '/',
-      '/login',
-      '/register',
-      '/forgot-password',
-      '/reset-password'
-    ];
-
-    // Public paths that start with these prefixes
-    const publicPathPrefixes = [
-      '/api/public',
-      '/_next',
-      '/favicon',
+      '/login', 
+      '/auth/login',
+      '/register', 
+      '/auth/register',
       '/static',
+      '/public',
+      '/api',
+      '/favicon.ico',
+      '/_next',
+      '/images',
+      '/assets'
     ];
-
-    // Check if the path exactly matches a public path
-    const isExactPublicPath = publicPaths.includes(path);
     
-    // Check if the path starts with a public prefix
-    const hasPublicPrefix = publicPathPrefixes.some(prefix => path.startsWith(prefix));
+    // Check if path is public
+    const isPublic = publicPaths.some(p => path === p || path.startsWith(p));
     
-    // Special handling for root and sub-paths
-    const isPublicSubPath = publicPaths.some(publicPath => {
-      // Skip the root path for this check to prevent everything being public
-      if (publicPath === '/') return false;
-      return path.startsWith(`${publicPath}/`);
-    });
-
-    const isPublicPath = isExactPublicPath || hasPublicPrefix || isPublicSubPath;
-
-    console.debug('requiresAuth check:', { 
-      path, 
-      isPublicPath, 
-      isExactPublicPath, 
-      hasPublicPrefix, 
-      isPublicSubPath 
-    });
+    // Thêm debug log
+    if (!isPublic) {
+      debugLog('Path requires auth', { path });
+    }
     
-    return !isPublicPath;
-  };
+    return !isPublic;
+  }, []);
 
-  // Function to handle auth redirects based on path and auth state
+  // Handle redirect based on auth status and path
   const handleAuthRedirect = useCallback((path: string): void => {
-    console.debug('handleAuthRedirect called for path:', path);
+    // Don't redirect if no path
+    if (!path) return;
     
-    // Prevent redirect loops
+    // Don't redirect when loading
+    if (isLoading) {
+      debugLog('Skipping redirect - Auth still loading', { path });
+      return;
+    }
+    
+    // Tránh chuyển hướng đến cùng một path liên tục
     if (path === lastPathRef.current) {
-      console.debug('Skipping redirect - same as last path');
+      debugLog('Skipping redirect - Already redirected to this path', { path });
       return;
     }
     
-    // Update last path reference
-    lastPathRef.current = path;
-    
-    const isPathProtected = requiresAuth(path);
-    const isUserAuthenticated = !!user;
-    const isAuthLoading = isLoading;
-    
-    console.debug('Auth redirect check:', { 
+    // Log ít thông tin hơn để tránh lộ dữ liệu
+    debugLog('Checking auth redirect', { 
       path, 
-      isPathProtected, 
-      isUserAuthenticated,
-      isAuthLoading,
-      hasUser: !!user,
-      username: user?.username || null,
-      lastChecked
+      isAuthenticated: !!user,
+      lastRedirectTime: new Date().getTime() - lastRedirectTimeRef.current
     });
-    
-    // Don't redirect while still loading auth state
-    if (isAuthLoading) {
-      console.debug('Skipping redirect - auth state still loading');
+
+    // Kiểm tra nếu đã chuyển hướng gần đây để tránh redirect loops
+    const redirectCooldown = 1000; // 1 giây
+    const now = new Date().getTime();
+    if (now - lastRedirectTimeRef.current < redirectCooldown) {
+      debugLog('Redirect blocked - Too soon after previous redirect', {
+        msSinceLastRedirect: now - lastRedirectTimeRef.current
+      });
       return;
     }
-    
-    if (isPathProtected && !isUserAuthenticated && lastChecked > 0) {
-      console.debug('Redirecting unauthenticated user from protected page');
-      // Build the return URL
-      const returnUrl = path || '/';
-      router.push(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
-    } else if (path === '/login' && isUserAuthenticated) {
-      console.debug('Redirecting authenticated user from login page');
+
+    // Remember current path to prevent redirect loops
+    lastPathRef.current = path;
+
+    // Path checks với các route nên kiểm tra một cách chi tiết hơn
+    const isLoginPath = path === '/login' || path === '/auth/login';
+    const isRegisterPath = path === '/register' || path === '/auth/register';
+    const isAuthPath = isLoginPath || isRegisterPath || path.startsWith('/auth/');
+    const isPublicPath = isAuthPath || path === '/' || path.startsWith('/static/');
+    const needsRedirect = requiresAuth(path) && !user;
+
+    // Redirect login/register to home if already authenticated
+    if (user && isAuthPath) {
+      debugLog('Redirecting to home - Already authenticated user on auth page');
       router.push('/');
+      lastRedirectTimeRef.current = now; // Cập nhật thời gian chuyển hướng
+      return;
+    }
+
+    // Redirect protected pages to login if not authenticated
+    if (needsRedirect) {
+      debugLog('Redirecting to login - Authentication required');
+      router.push('/login');
+      lastRedirectTimeRef.current = now; // Cập nhật thời gian chuyển hướng
+      return;
     }
   }, [user, isLoading, router, requiresAuth, lastChecked]);
   
