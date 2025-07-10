@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 // Minimal metadata configuration
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-  manifest: '/site.webmanifest',
+  // manifest: '/site.webmanifest',
   other: {
     'msapplication-TileColor': '#ffffff',
   },

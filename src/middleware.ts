@@ -115,18 +115,13 @@ export async function middleware(request: NextRequest) {
     response = NextResponse.next();
   }
 
-  // Skip authentication check for public paths
-  if (isPublicPath(pathname)) {
+  // Skip authentication check for public paths and static resources
+  if (isPublicPath(pathname) || pathname.startsWith('/_next/') || pathname.startsWith('/static/') || pathname.startsWith('/public/') || pathname === '/favicon.ico') {
     return response;
   }
 
   // Get token from request
   const token = getTokenFromRequest(request);
-  
-  // Skip authentication check for public paths
-  if (isPublicPath(pathname)) {
-    return response;
-  }
   
   // For API routes, just pass through the request
   // API routes should handle their own authentication
