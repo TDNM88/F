@@ -30,7 +30,7 @@ let cachedUser: {
   timestamp: number;
 } | null = null;
 
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes cache duration
+const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days cache duration (matching cookie expiration)
 
 function useAuthStandalone(): AuthContextType {
   const [user, setUser] = useState<User | null>(null);

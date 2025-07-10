@@ -4,12 +4,12 @@ import { hashPassword, generateToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    const { username, password, email, name } = await request.json();
+    const { username, password } = await request.json();
 
     // Validate input
-    if (!username || !password || !email) {
+    if (!username || !password) {
       return NextResponse.json(
-        { success: false, message: 'Vui lòng nhập đầy đủ thông tin' },
+        { success: false, message: 'Vui lòng nhập username và password' },
         { status: 400 }
       );
     }
@@ -30,40 +30,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { success: false, message: 'Email không hợp lệ' },
-        { status: 400 }
-      );
-    }
-
     const db = await getMongoDb();
     if (!db) {
       throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
 
-    // Check if username or email already exists
+    // Check if username already exists
     const existingUser = await db.collection('users').findOne({
-      $or: [
-        { username: username.trim().toLowerCase() },
-        { email: email.trim().toLowerCase() }
-      ]
+      username: username.trim().toLowerCase()
     });
 
     if (existingUser) {
-      if (existingUser.username === username.trim().toLowerCase()) {
-        return NextResponse.json(
-          { success: false, message: 'Tên đăng nhập đã được sử dụng' },
-          { status: 400 }
-        );
-      } else {
-        return NextResponse.json(
-          { success: false, message: 'Email đã được đăng ký' },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json(
+        { success: false, message: 'Tên đăng nhập đã được sử dụng' },
+        { status: 400 }
+      );
     }
 
     // Hash password
@@ -73,8 +54,6 @@ export async function POST(request: Request) {
     // Create new user
     const newUser = {
       username: username.trim().toLowerCase(),
-      email: email.trim().toLowerCase(),
-      name: name?.trim() || username.trim(),
       password: hashedPassword,
       role: 'user',
       balance: {

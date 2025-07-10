@@ -24,14 +24,14 @@ const args = process.argv.slice(2);
 
 // Check if admin credentials are provided
 if (args.length < 2) {
-  console.error('Please provide admin email and password as arguments:');
-  console.error('  node test-auth-flow.js <admin-email> <admin-password>');
+  console.error('Please provide admin username and password as arguments:');
+  console.error('  node test-auth-flow.js <admin-username> <admin-password>');
   process.exit(1);
 }
 
 // Test admin credentials (should be pre-created in the database)
 const ADMIN_CREDENTIALS = {
-  email: args[0],
+  username: args[0],
   password: args[1],
 };
 
@@ -40,7 +40,7 @@ async function cleanupTestUser() {
   try {
     // First login as admin
     const loginRes = await client.post('/api/auth/login', {
-      email: ADMIN_CREDENTIALS.email,
+      username: ADMIN_CREDENTIALS.username,
       password: ADMIN_CREDENTIALS.password,
     });
 
@@ -82,7 +82,7 @@ async function runTests() {
     console.log('\n2. Testing login with wrong credentials...');
     try {
       await client.post('/api/auth/login', {
-        email: TEST_USER.email,
+        username: TEST_USER.username,
         password: 'wrongpassword',
       });
       throw new Error('Login with wrong password should fail');
@@ -97,7 +97,7 @@ async function runTests() {
     // 4. Test login with correct credentials
     console.log('\n3. Testing login with correct credentials...');
     const loginResponse = await client.post('/api/auth/login', {
-      email: TEST_USER.email,
+      username: TEST_USER.username,
       password: TEST_USER.password,
     });
 
@@ -135,7 +135,7 @@ async function runTests() {
     // 7. Test admin login and access
     console.log('\n6. Testing admin login and access...');
     const adminLogin = await client.post('/api/auth/login', {
-      email: ADMIN_CREDENTIALS.email,
+      username: ADMIN_CREDENTIALS.username,
       password: ADMIN_CREDENTIALS.password,
     });
 

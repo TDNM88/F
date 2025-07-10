@@ -5,21 +5,21 @@ import { generateToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const { username, password } = await request.json();
 
-    if (!email || !password) {
+    if (!username || !password) {
       return NextResponse.json(
-        { success: false, message: 'Email và mật khẩu là bắt buộc' },
+        { success: false, message: 'Tên đăng nhập và mật khẩu là bắt buộc' },
         { status: 400 }
       );
     }
 
     const db = await getMongoDb();
-    const user = await db.collection('users').findOne({ email });
+    const user = await db.collection('users').findOne({ username });
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: 'Email hoặc mật khẩu không đúng' },
+        { success: false, message: 'Tên đăng nhập hoặc mật khẩu không đúng' },
         { status: 401 }
       );
     }
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       return NextResponse.json(
-        { success: false, message: 'Email hoặc mật khẩu không đúng' },
+        { success: false, message: 'Tên đăng nhập hoặc mật khẩu không đúng' },
         { status: 401 }
       );
     }
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email,
+        username: user.username,
         role: user.role || 'user',
         balance: user.balance || 0
       }
