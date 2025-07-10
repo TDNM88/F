@@ -19,10 +19,20 @@ const TEST_USER = {
   password: 'Test@12345',
 };
 
+// Parse command line arguments
+const args = process.argv.slice(2);
+
+// Check if admin credentials are provided
+if (args.length < 2) {
+  console.error('Please provide admin email and password as arguments:');
+  console.error('  node test-auth-flow.js <admin-email> <admin-password>');
+  process.exit(1);
+}
+
 // Test admin credentials (should be pre-created in the database)
 const ADMIN_CREDENTIALS = {
-  email: process.env.TEST_ADMIN_EMAIL || 'admin@example.com',
-  password: process.env.TEST_ADMIN_PASSWORD || 'Admin@12345',
+  email: args[0],
+  password: args[1],
 };
 
 // Utility function to clear test user
