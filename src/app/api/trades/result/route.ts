@@ -29,14 +29,14 @@ export async function POST(request: NextRequest) {
 
     // Cập nhật trạng thái giao dịch
     const result = await db.collection('trades').updateOne(
-      { _id: new ObjectId(tradeId), userId: user.id },
+      { _id: new ObjectId(tradeId), userId: user._id },
       { $set: { status: 'completed', result, profit, updatedAt: new Date() } }
     );
 
     // Cập nhật số dư người dùng nếu có lợi nhuận
-    if (profit && profit > 0) {
+    if (profit > 0) {
       await db.collection('users').updateOne(
-        { email: token.email },
+        { _id: user._id },
         { $inc: { 'balance.available': profit } }
       );
     }

@@ -34,9 +34,10 @@ export async function verifyToken(req: NextRequest): Promise<User | null> {
     
     // Return the user object with necessary fields
     return {
-      id: user._id.toString(),
-      username: user.username,
+      _id: user._id.toString(),
       email: user.email,
+      name: user.name || user.username || '',
+      username: user.username,
       role: user.role || 'user',
       balance: user.balance || { available: 0, frozen: 0 },
       ...(user.bank && { bank: user.bank }),
