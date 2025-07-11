@@ -6,10 +6,11 @@ const allowedOrigins = [
   'https://inal-hsc1.com',
   'https://www.inal-hsc1.com',
   'https://london-hsc.com',
-  'https://www.london-hsc.com',
+  'https://www.london-hsc.com'
+  'https://family-neon.vercel.app'
   // Môi trường phát triển
-  'http://localhost:3001',
-  'http://127.0.0.1:3001',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
 ];
 
 // Các header bảo mật
