@@ -39,40 +39,29 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       user: {
-        id: user._id,
-        name: user.name,
+        id: user._id.toString(),
         username: user.username,
-        role: user.role || 'user',
-        balance: user.balance || 0
-      }
+        email: user.email,
+        role: user.role,
+        balance: user.balance,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      token: token
     });
-
-    // Set token in HTTP-only cookie với cấu hình phù hợp cho development
-    // Trong development, httpOnly:false giúp client script đọc cookie để debug
-    console.debug('Setting auth cookie token:', { tokenLength: token.length });
     
-    // Định nghĩa thời gian sống của token - 7 ngày
-    const TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-    const TOKEN_MAX_AGE_SEC = Math.floor(TOKEN_MAX_AGE_MS / 1000); // Convert to seconds for cookie API
-    
+    // Không thiết lập cookie nữa, client sẽ lưu token vào localStorage
+    /*
     response.cookies.set('token', token, {
-      httpOnly: process.env.NODE_ENV === 'production', // Tắt httpOnly trong development để debug
+      httpOnly: process.env.NODE_ENV === 'production',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: TOKEN_MAX_AGE_SEC, // Next.js cookies API sử dụng seconds
+      maxAge: TOKEN_MAX_AGE_SEC,
       path: '/',
       sameSite: 'lax',
     });
+    */
     
-    // Thêm debug cookie không httpOnly để client có thể kiểm tra
-    if (process.env.NODE_ENV !== 'production') {
-      response.cookies.set('debug_token', 'exists', {
-        httpOnly: false,
-        secure: false,
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      });
-    }
-
+    console.debug('Login successful, token generated', { username, token: token.substring(0, 10) + '...' });
     return response;
   } catch (error) {
     console.error('Login error:', error);

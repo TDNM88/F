@@ -18,89 +18,89 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // Authentication
     AUTH: {
-      LOGIN: '/api/auth/login',
-      LOGOUT: '/api/auth/logout',
-      ME: '/api/auth/me',
-      REGISTER: '/api/register',
-      SETUP: '/api/setup',
+      LOGIN: '/auth/login',
+      LOGOUT: '/auth/logout',
+      ME: '/auth/me',
+      REGISTER: '/register',
+      SETUP: '/setup',
     },
     
     // Users
     USERS: {
-      BASE: '/api/users',
-      BANK_INFO: '/api/users/bank-info',
-      UPDATE_BANK_INFO: '/api/users/bank-info',
+      BASE: '/users',
+      BANK_INFO: '/users/bank-info',
+      UPDATE_BANK_INFO: '/users/bank-info',
     },
     
     // Trades
     TRADES: {
-      BASE: '/api/trades',
-      PLACE: '/api/trades/place',
-      CHECK_RESULTS: '/api/trades/check-results',
-      BY_ID: (id: string) => `/api/trades/${id}`,
+      BASE: '/trades',
+      PLACE: '/trades/place',
+      CHECK_RESULTS: '/trades/check-results',
+      BY_ID: (id: string) => `/trades/${id}`,
     },
     
     // Orders
     ORDERS: {
-      BASE: '/api/orders',
-      HISTORY: '/api/orders/history',
+      BASE: '/orders',
+      HISTORY: '/orders/history',
     },
     
     // Sessions
     SESSIONS: {
-      CURRENT: '/api/sessions/current',
-      BASE: '/api/sessions',
+      CURRENT: '/sessions/current',
+      BASE: '/sessions',
     },
     
     // Deposits
     DEPOSITS: {
-      BASE: '/api/deposits',
-      HISTORY: '/api/deposits/history',
+      BASE: '/deposits',
+      HISTORY: '/deposits/history',
     },
     
     // Withdrawals
     WITHDRAWALS: {
-      BASE: '/api/withdrawals',
-      HISTORY: '/api/withdrawals/history',
+      BASE: '/withdrawals',
+      HISTORY: '/withdrawals/history',
     },
     
     // Admin
     ADMIN: {
       // Users
       USERS: {
-        BASE: '/api/admin/users',
-        BY_ID: (id: string) => `/api/admin/users/${id}`,
+        BASE: '/admin/users',
+        BY_ID: (id: string) => `/admin/users/${id}`,
       },
       
       // Deposits
       DEPOSITS: {
-        BASE: '/api/admin/deposits',
-        BY_ID: (id: string) => `/api/admin/deposits/${id}`,
+        BASE: '/admin/deposits',
+        BY_ID: (id: string) => `/admin/deposits/${id}`,
       },
       
       // Withdrawals
       WITHDRAWALS: {
-        BASE: '/api/admin/withdrawals',
-        BY_ID: (id: string) => `/api/admin/withdrawals/${id}`,
+        BASE: '/admin/withdrawals',
+        BY_ID: (id: string) => `/admin/withdrawals/${id}`,
       },
       
       // Verification
       VERIFICATION: {
-        REQUESTS: '/api/admin/verification-requests',
-        BY_ID: (id: string) => `/api/admin/verification-requests/${id}`,
+        REQUESTS: '/admin/verification-requests',
+        BY_ID: (id: string) => `/admin/verification-requests/${id}`,
       },
-      
+            
       // Stats
       STATS: {
-        BASE: '/api/admin/stats',
+        BASE: '/admin/stats',
       },
     },
     
     // Upload
     UPLOAD: {
-      BASE: '/api/upload',
-      BLOB: '/api/blob',
-      TEST_BLOB: '/api/test-blob',
+      BASE: '/upload',
+      BLOB: '/blob',
+      TEST_BLOB: '/test-blob',
     },
   },
   
