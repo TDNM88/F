@@ -1,5 +1,4 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 
 // Danh sách domain được phép truy cập
 const allowedOrigins = [
@@ -7,6 +6,7 @@ const allowedOrigins = [
   'https://www.inal-hsc1.com',
   'https://london-hsc.com',
   'https://www.london-hsc.com',
+  'https://family-neon.vercel.app',
   // Môi trường phát triển
   'http://localhost:3001',
   'http://127.0.0.1:3001',
@@ -74,10 +74,8 @@ function isPublicPath(pathname: string): boolean {
     '/fonts',
     
     // API endpoints that should be public
-    '/api/rates',
-    '/api/markets',
-    '/api/announcements',
-    
+    '/api/*',
+
     // Development only
     ...(process.env.NODE_ENV === 'development' ? [
       '/api/__coverage__',
@@ -125,7 +123,7 @@ export async function middleware(request: NextRequest) {
   
   // For API routes, just pass through the request
   // API routes should handle their own authentication
-  if (pathname.startsWith('/api/')) {
+  if (pathname.startsWith('/api')) {
     return response;
   }
   
@@ -181,122 +179,6 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  // Xử lý preflight request (OPTIONS) đã được xử lý ở trên
-  if (request.method === 'OPTIONS') {
-    return response;
-  }
-
-  // Chặn request từ origin không được phép
-  if (origin && !isAllowedOrigin) {
-    return new NextResponse(
-      JSON.stringify({
-        success: false,
-        message: 'Not allowed by CORS',
-        allowedOrigins
-      }),
-      {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
-  }
-
-  // Public routes that don't require authentication
-  const publicRoutes = ["/", "/login", "/register"];
-  
-  // API routes that don't require authentication
-  const publicApiRoutes = ["/api/auth/me"];
-  
-  // Skip auth check for public API routes
-  if (publicApiRoutes.some(route => pathname.startsWith(route))) {
-    return response;
-  }
-
-  // API routes that should be handled separately
-  if (pathname.startsWith("/api/")) {
-    // Chặn request từ origin không được phép
-    if (origin && !isAllowedOrigin) {
-      return new NextResponse(
-        JSON.stringify({
-          success: false,
-          message: 'Not allowed by CORS',
-          allowedOrigins
-        }),
-        {
-          status: 403,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...Object.fromEntries(
-              Object.entries(securityHeaders).map(([k, v]) => [k, v])
-            )
-          }
-        }
-      );
-    }
-
-    // Thêm các header bảo mật cho API
-    Object.entries(securityHeaders).forEach(([key, value]) => {
-      response.headers.set(key, value);
-    });
-    
-    // Thêm CORS headers cho các response API
-    if (isAllowedOrigin) {
-      response = setCorsHeaders(response, origin);
-    }
-    
-    return response;
-  }
-
-  // Static files and Next.js internals
-  if (
-    pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/site.webmanifest" ||
-    pathname.startsWith("/images/") ||
-    pathname.startsWith("/icons/") ||
-    pathname.endsWith(".png") ||
-    pathname.endsWith(".jpg") ||
-    pathname.endsWith(".jpeg") ||
-    pathname.endsWith(".gif") ||
-    pathname.endsWith(".svg") ||
-    pathname.endsWith(".css") ||
-    pathname.endsWith(".js")
-  ) {
-    return response;
-  }
-
-  // Check if current path is public
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname === route || pathname.startsWith(`${route}/`)
-  );
-
-  // If no token and trying to access protected route
-  if (!token && !isPublicRoute) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // If has token but trying to access auth pages, redirect to home
-  if (token && (pathname === "/login" || pathname === "/register")) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
-  // Thêm các header bảo mật cho các trang thông thường
-  Object.entries(securityHeaders).forEach(([key, value]) => {
-    response.headers.set(key, value);
-  });
-
-  // Log các request (chỉ trong môi trường development)
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[${request.method}] ${pathname}`, {
-      origin,
-      userAgent: request.headers.get('user-agent'),
-      referer: request.headers.get('referer'),
-    });
-  }
-
-  return response;
 }
 
 // Define paths that should be excluded from middleware processing

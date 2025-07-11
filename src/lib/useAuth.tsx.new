@@ -1,7 +1,0 @@
-"use client"
-
-// Re-export everything from useAuthNew.tsx
-// This ensures all components that import from useAuth will use the updated implementation
-// with persistent login functionality
-
-export { useAuth, AuthProvider } from '@/lib/useAuthNew';
